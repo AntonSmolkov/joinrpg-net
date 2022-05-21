@@ -91,7 +91,7 @@ jobs:
         docker tag ${APP_NAME} ${IMAGE_ID}:${VERSION}
         docker push ${IMAGE_ID}:${VERSION}
         
-        if [[ "${{ env.CALCULATED_VERSION_IS_RELEASE }}" == "true" ]]
+        if [[ "${{ env.CALCULATED_VERSION_IS_RELEASE }}" == "True" ]]
         then
           docker tag ${APP_NAME} ${IMAGE_ID}:latest
           docker push $IMAGE_ID:latest
@@ -108,7 +108,7 @@ jobs:
         docker tag ${APP_NAME} ${IMAGE_ID}:${VERSION}
         docker push ${IMAGE_ID}:${VERSION}
         
-        if [[ "${{ env.CALCULATED_VERSION_IS_RELEASE }}" == "true" ]]
+        if [[ "${{ env.CALCULATED_VERSION_IS_RELEASE }}" == "True" ]]
         then
           docker tag ${MIGRATOR_NAME} ${IMAGE_ID}:latest
           docker push $IMAGE_ID:latest
