@@ -39,7 +39,7 @@ jobs:
       with:
         dotnet-version: 6.0.x
 
-    - name: Restore dependencies cache
+    - name: Restore nuget dependencies cache
       uses: actions/cache@v2
       with:
         path: ~/.nuget/packages
@@ -48,6 +48,10 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-nuget
  
+    - name: Restore docker images cache
+      uses: satackey/action-docker-layer-caching@v0.0.11
+      continue-on-error: true
+
     - name: Restore
       run: dotnet restore
 
