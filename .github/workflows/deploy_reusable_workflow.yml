@@ -1,0 +1,76 @@
+on:
+  workflow_call:
+    inputs:
+      deployVersion:
+        required: true
+        type: string
+      environment_url:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+env:
+  APP_NAME: vaadin-demo-bakery-app
+
+jobs:
+  deploy:
+    environment: 
+      name: ${{ inputs.environment }} 
+      url: ${{ inputs.environment_url }}
+    name: deploy
+    env:
+      ENVIRONMENT: ${{ inputs.environment }} 
+    runs-on: ubuntu-20.04
+    permissions: read-all
+    steps:
+      - name: Check tag existance and fill image related env vars
+        id: check_existence
+        run: |  
+          REPOSITORY_ID=$(echo ${{ github.repository_owner }}/${APP_NAME}  | tr '[A-Z]' '[a-z]')
+          IMAGE_ID=$(echo ghcr.io/${REPOSITORY_ID}| tr '[A-Z]' '[a-z]')
+          IMAGE_VERSION=$(echo ${{ inputs.deployVersion }} | tr '[A-Z]' '[a-z]')
+          REPOSITORY_TOKEN=$(curl -u ${{ github.repository_owner }}:${{ secrets.GITHUB_TOKEN }} https://ghcr.io/token\?scope\="repository:${REPOSITORY_ID}:pull" | jq -r .token)
+
+          curl --head --fail -H "Authorization: Bearer ${REPOSITORY_TOKEN}" https://ghcr.io/v2/${IMAGE_ID}/manifests/${IMAGE_VERSION}
+          
+          echo "IMAGE_ID=${IMAGE_ID}" >> $GITHUB_ENV
+          echo "IMAGE_VERSION=${IMAGE_VERSION}" >> $GITHUB_ENV
+          echo "IMAGE_FULL_ID=${IMAGE_ID}:${IMAGE_VERSION}" >> $GITHUB_ENV
+      
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v2.0
+    
+      - name: Set kubeconfig
+        uses: azure/k8s-set-context@v2
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Fill config k8s secret
+        run: |
+          echo "${MAIN_SECRET}" > ./manifests/base/main-secret.yaml
+        env:
+          MAIN_SECRET: '${{ secrets.MAIN_SECRET }}'
+        
+      - name: Generate environment manifests
+        run: |
+            cat <<EOF >> ./manifests/${ENVIRONMENT}/kustomization.yaml
+            
+            images:
+            - name: vaadin-demo-bakery-app
+              newName: ${{ env.IMAGE_ID }}
+              newTag: ${{ env.IMAGE_VERSION }}
+            EOF
+            kubectl kustomize ./manifests/${ENVIRONMENT}/ > ./manifests.result.yaml
+        
+      - name: Show generated environment manifests
+        run: cat manifests.result.yaml
+        
+      - name: Deploy to k8s
+        run: |
+          kubectl apply -f ./manifests.result.yaml --namespace ${ENVIRONMENT} --insecure-skip-tls-verify 
+          kubectl rollout status deployment/${APP_NAME} --namespace ${ENVIRONMENT}
