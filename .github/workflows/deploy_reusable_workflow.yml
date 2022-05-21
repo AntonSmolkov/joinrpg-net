@@ -11,7 +11,8 @@ on:
         required: true
         type: string
 env:
-  APP_NAME: vaadin-demo-bakery-app
+  APP_NAME: joinrpg-portal
+  MIGRATOR_NAME: joinrpg-dal-migrate
 
 jobs:
   deploy:
@@ -24,19 +25,26 @@ jobs:
     runs-on: ubuntu-20.04
     permissions: read-all
     steps:
-      - name: Check tag existance and fill image related env vars
+      - name: Check images existance and fill images related env vars
         id: check_existence
         run: |  
-          REPOSITORY_ID=$(echo ${{ github.repository_owner }}/${APP_NAME}  | tr '[A-Z]' '[a-z]')
-          IMAGE_ID=$(echo ghcr.io/${REPOSITORY_ID}| tr '[A-Z]' '[a-z]')
-          IMAGE_VERSION=$(echo ${{ inputs.deployVersion }} | tr '[A-Z]' '[a-z]')
-          REPOSITORY_TOKEN=$(curl -u ${{ github.repository_owner }}:${{ secrets.GITHUB_TOKEN }} https://ghcr.io/token\?scope\="repository:${REPOSITORY_ID}:pull" | jq -r .token)
+          APP_REPOSITORY_ID=$(echo ${{ github.repository_owner }}/${APP_NAME}  | tr '[A-Z]' '[a-z]')
+          APP_IMAGE_ID=$(echo ghcr.io/${APP_REPOSITORY_ID}| tr '[A-Z]' '[a-z]')
 
-          curl --head --fail -H "Authorization: Bearer ${REPOSITORY_TOKEN}" https://ghcr.io/v2/${IMAGE_ID}/manifests/${IMAGE_VERSION}
+          MIGRATOR_REPOSITORY_ID=$(echo ${{ github.repository_owner }}/${MIGRATOR_NAME}  | tr '[A-Z]' '[a-z]')
+          MIGRATOR_IMAGE_ID=$(echo ghcr.io/${MIGRATOR_REPOSITORY_ID}| tr '[A-Z]' '[a-z]')
+
+          COMMON_IMAGE_VERSION=$(echo ${{ inputs.deployVersion }} | tr '[A-Z]' '[a-z]')
+
+          REPOSITORY_TOKEN=$(curl -u ${{ github.repository_owner }}:${{ secrets.GITHUB_TOKEN }} https://ghcr.io/token\?scope\="repository:${APP_REPOSITORY_ID}:pull" | jq -r .token)
+
+          curl --head --fail -H "Authorization: Bearer ${REPOSITORY_TOKEN}" https://ghcr.io/v2/${APP_IMAGE_ID}/manifests/${COMMON_IMAGE_VERSION}
+          curl --head --fail -H "Authorization: Bearer ${REPOSITORY_TOKEN}" https://ghcr.io/v2/${MIGRATOR_IMAGE_ID}/manifests/${COMMON_IMAGE_VERSION} 
           
-          echo "IMAGE_ID=${IMAGE_ID}" >> $GITHUB_ENV
-          echo "IMAGE_VERSION=${IMAGE_VERSION}" >> $GITHUB_ENV
-          echo "IMAGE_FULL_ID=${IMAGE_ID}:${IMAGE_VERSION}" >> $GITHUB_ENV
+          echo "APP_IMAGE_ID=${APP_IMAGE_ID}" >> $GITHUB_ENV
+          echo "MIGRATOR_IMAGE_ID=${APP_IMAGE_ID}" >> $GITHUB_ENV
+
+          echo "COMMON_IMAGE_VERSION=${COMMON_IMAGE_VERSION}" >> $GITHUB_ENV
       
       - name: Checkout Repo
         uses: actions/checkout@v3
@@ -50,27 +58,47 @@ jobs:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBECONFIG }}
 
-      - name: Fill config k8s secret
-        run: |
-          echo "${MAIN_SECRET}" > ./manifests/base/main-secret.yaml
-        env:
-          MAIN_SECRET: '${{ secrets.MAIN_SECRET }}'
+      - name: Turn github secrets to .env file
+        uses: shine1594/secrets-to-env-action@master
+        with:
+          secrets: ${{ toJSON(secrets) }}
+          secrets_env: all
+          prefix_prod: ''
+          prefix_dev: ''
+          file_name_prod: 'joinrpg-main.secret.env'
+          file_name_dev: 'joinrpg-main.secret.env'
         
       - name: Generate environment manifests
         run: |
             cat <<EOF >> ./manifests/${ENVIRONMENT}/kustomization.yaml
             
+            secretGenerator:
+            - name: joinrpg-main
+            files:
+            - joinrpg-main.secret.env
+
             images:
-            - name: vaadin-demo-bakery-app
-              newName: ${{ env.IMAGE_ID }}
-              newTag: ${{ env.IMAGE_VERSION }}
+            - name: ${APP_NAME}
+              newName: ${{ env.APP_IMAGE_ID }}
+              newTag: ${{ env.COMMON_IMAGE_VERSION }}
+
+            - name: ${MIGRATOR_NAME}
+              newName: ${{ env.MIGRATOR_IMAGE_ID }}
+              newTag: ${{ env.COMMON_IMAGE_VERSION }}
+
             EOF
-            kubectl kustomize ./manifests/${ENVIRONMENT}/ > ./manifests.result.yaml
+            mkdir kustomize_output
+            kubectl kustomize ./manifests/${ENVIRONMENT}/ -o kustomize_output
         
       - name: Show generated environment manifests
         run: cat manifests.result.yaml
         
+      - name: Apply DB migrations
+        run: |
+          kubectl replace --force -f ./kustomize_output/v1_secret_joinrpg-main-* -f ./kustomize_output/batch_v1_job_joinrpg-dal-migrate.yaml --namespace ${ENVIRONMENT} --insecure-skip-tls-verify
+          kubectl wait --for=condition=complete --timeout=120s job/joinrpg-dal-migrate --namespace ${ENVIRONMENT} --insecure-skip-tls-verify
+
       - name: Deploy to k8s
         run: |
-          kubectl apply -f ./manifests.result.yaml --namespace ${ENVIRONMENT} --insecure-skip-tls-verify 
-          kubectl rollout status deployment/${APP_NAME} --namespace ${ENVIRONMENT}
+          kubectl replace --force -f ./kustomize_output/* --namespace ${ENVIRONMENT} --insecure-skip-tls-verify
+          kubectl rollout status deployment/${APP_NAME} --namespace ${ENVIRONMENT} --insecure-skip-tls-verify

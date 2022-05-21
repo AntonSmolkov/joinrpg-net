@@ -1,0 +1,27 @@
+resources:
+  - ../base
+  - service-monitor.yaml
+  - monitoring.yaml
+
+namespace: production
+
+patchesJSON6902:
+- target:
+    kind: Ingress
+    name: joinrpg-portal
+  patch: |-
+    - op: replace
+      path: /spec/rules/0/host
+      value: bakery.smolkov.spb.ru
+    - op: replace
+      path: /spec/tls/0/hosts/0
+      value: bakery.smolkov.spb.ru
+    - op: replace
+      path: /spec/tls/0/secretName
+      value: bakery-tls
+
+
+secretGenerator:
+- name: joinrpg-main
+  files:
+  - joinrpg-main.secret.env

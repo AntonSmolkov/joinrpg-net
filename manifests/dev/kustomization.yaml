@@ -1,0 +1,19 @@
+resources:
+  - ../base
+
+namespace: develop
+
+patchesJSON6902:
+- target:
+    kind: Ingress
+    name: joinrpg-portal
+  patch: |-
+    - op: replace
+      path: /spec/rules/0/host
+      value: bakery-develop.smolkov.spb.ru
+    - op: replace
+      path: /spec/tls/0/hosts/0
+      value: bakery-develop.smolkov.spb.ru
+    - op: replace
+      path: /spec/tls/0/secretName
+      value: bakery-develop-tls

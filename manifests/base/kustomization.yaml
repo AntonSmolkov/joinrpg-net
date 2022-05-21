@@ -1,0 +1,10 @@
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - pdp.yaml
+  - db-migration-job.yaml
+
+  
+namespace: dummy

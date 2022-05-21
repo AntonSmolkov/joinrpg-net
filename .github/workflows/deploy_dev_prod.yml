@@ -1,4 +1,4 @@
-name: Deploy (staging/production)
+name: Deploy (dev/prod)
 on:
   workflow_dispatch:
     inputs:
@@ -7,21 +7,21 @@ on:
         required: true
 
 jobs:
-  deploy-staging:
+  deploy-dev:
     permissions: read-all
     uses: ./.github/workflows/deploy_reusable_workflow.yml
     with:
       deployVersion: ${{ github.event.inputs.deployVersion }}
-      environment: staging
+      environment: dev
       environment_url: https://bakery-staging.smolkov.spb.ru
     secrets: inherit
 
-  deploy-production:
-    needs: deploy-staging
+  deploy-prod:
+    needs: deploy-dev
     permissions: read-all
     uses: ./.github/workflows/deploy_reusable_workflow.yml
     with:
       deployVersion: ${{ github.event.inputs.deployVersion }}
-      environment: production
-      environment_url: https://bakery.smolkov.spb.ru
+      environment: prod
+      environment_url: https://dev-joinrpg.ru
     secrets: inherit
