@@ -52,7 +52,7 @@ jobs:
       run: dotnet restore
 
     - name: Test
-      run: dotnet test -c Release --no-restore --loger trx --results-directory ./TestResults || exit 0
+      run: dotnet test -c Release --no-restore --logger trx --results-directory ./TestResults || exit 0
 
     - name: Report tests results
       uses: NasAmin/trx-parser@v0.1
@@ -62,7 +62,7 @@ jobs:
         REPO_TOKEN: ${{ secrets.GITHUB_TOKEN }}    
 
     - name: Publish portal
-      run: dotnet publish -c Release --no-restore ./src/JoinRpg.Portal/JoinRpg.Portal.csproj -p:Version={{ env.CALCULATED_VERSION }}
+      run: dotnet publish -c Release --no-restore ./src/JoinRpg.Portal/JoinRpg.Portal.csproj -p:Version=${{ env.CALCULATED_VERSION }}
 
     - name: Publish migrator
       run: dotnet publish -c Release --no-restore ./src/Joinrpg.Dal.Migrate/Joinrpg.Dal.Migrate.csproj -p:Version=${{ env.CALCULATED_VERSION }}
