@@ -1,7 +1,7 @@
 ﻿FROM mcr.microsoft.com/dotnet/aspnet:6.0
 
 RUN groupadd user && \
-    useradd -g user user --home-dir "/app"
+    useradd -g user user --home-dir "/app" --create-home
 
 USER user
 

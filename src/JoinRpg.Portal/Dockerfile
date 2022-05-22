@@ -4,7 +4,7 @@
 RUN apt-get update && apt-get install -y apt-utils libgdiplus libc6-dev
 
 RUN groupadd user && \
-    useradd -g user user --home-dir "/app"
+    useradd -g user user --home-dir "/app" --create-home
 
 USER user
 
