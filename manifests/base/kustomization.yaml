@@ -5,6 +5,13 @@ resources:
   - ingress.yaml
   - pdp.yaml
   - db-migration-job.yaml
-
   
 namespace: dummy
+
+commonLabels:
+    managed-by-kustomize: "true"
+
+secretGenerator:
+- name: joinrpg-main
+  envs:
+  - joinrpg-main.secret.env

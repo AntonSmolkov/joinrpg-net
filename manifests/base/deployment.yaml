@@ -41,25 +41,27 @@ spec:
         image: joinrpg-portal
         imagePullPolicy: IfNotPresent
         livenessProbe:
+          failureThreshold: 5
           httpGet:
-            path: /actuator/health
+            path: /health/live
             port: 8080
-          initialDelaySeconds: 120
-          periodSeconds: 15
+            scheme: HTTP
+          initialDelaySeconds: 30
         readinessProbe:
+          failureThreshold: 5
           httpGet:
-            path: /actuator/health
+            path: /health/ready
             port: 8080
-          initialDelaySeconds: 120
-          periodSeconds: 15
+            scheme: HTTP
+          initialDelaySeconds: 30
         ports:
         - containerPort: 8080
           name: http
           protocol: TCP
         resources:
           limits:
-            cpu: 2500m
-            memory: 2048Mi
+            cpu: 3000m
+            memory: 3072Mi
           requests:
             cpu: 500m
             memory: 512Mi

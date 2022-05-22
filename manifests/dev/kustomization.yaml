@@ -1,7 +1,7 @@
 resources:
   - ../base
 
-namespace: develop
+namespace: dev
 
 patchesJSON6902:
 - target:
@@ -10,10 +10,10 @@ patchesJSON6902:
   patch: |-
     - op: replace
       path: /spec/rules/0/host
-      value: bakery-develop.smolkov.spb.ru
+      value: dev-joinrpg.ru
     - op: replace
       path: /spec/tls/0/hosts/0
-      value: bakery-develop.smolkov.spb.ru
+      value: dev-joinrpg.ru
     - op: replace
       path: /spec/tls/0/secretName
-      value: bakery-develop-tls
+      value: dev-joinrpg-ru-tls

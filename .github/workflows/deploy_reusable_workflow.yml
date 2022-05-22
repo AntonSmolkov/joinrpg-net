@@ -65,8 +65,8 @@ jobs:
           secrets_env: all
           prefix_prod: ''
           prefix_dev: ''
-          file_name_prod: 'joinrpg-main.secret.env'
-          file_name_dev: 'joinrpg-main.secret.env'
+          file_name_prod: './manifests/${ENVIRONMENT}/joinrpg-main.secret.env'
+          file_name_dev: './manifests/${ENVIRONMENT}/joinrpg-main.secret.env'
         
       - name: Generate environment manifests
         run: |
@@ -76,6 +76,7 @@ jobs:
             - name: joinrpg-main
             files:
             - joinrpg-main.secret.env
+            behavior: replace
 
             images:
             - name: ${APP_NAME}
@@ -87,6 +88,7 @@ jobs:
               newTag: ${{ env.COMMON_IMAGE_VERSION }}
 
             EOF
+            #folder must present to let kustomize generate separete files
             mkdir kustomize_output
             kubectl kustomize ./manifests/${ENVIRONMENT}/ -o kustomize_output
         
@@ -95,10 +97,37 @@ jobs:
         
       - name: Apply DB migrations
         run: |
-          kubectl replace --force -f ./kustomize_output/v1_secret_joinrpg-main-* -f ./kustomize_output/batch_v1_job_joinrpg-dal-migrate.yaml --namespace ${ENVIRONMENT} --insecure-skip-tls-verify
-          kubectl wait --for=condition=complete --timeout=120s job/joinrpg-dal-migrate --namespace ${ENVIRONMENT} --insecure-skip-tls-verify
+          $ErrorActionPreference = 'Stop'
+
+          #Add new generated secret, replace old migration job
+          &"kubectl" "--%" "replace --force -f ./kustomize_output/v1_secret_joinrpg-main-* -f ./kustomize_output/batch_v1_job_joinrpg-dal-migrate.yaml -n $env:ENVIRONMENT"
+          if ($LastExitCode -ne 0) {exit $LastExitCode}
+
+          Write-Output "Waiting for job/joinrpg-dal-migrate to be completed or failed..."
+          
+          #Keep waiting while job is not completed or failed
+          while ( $(&"kubectl" "--%" "get jobs joinrpg-dal-migrate -n $env:ENVIRONMENT -o json" | ConvertFrom-Json -Depth 99).status.conditions.type -inotmatch "^Complete$|^Failed$" ){
+            if ($LastExitCode -ne 0) {exit $LastExitCode}
+            
+            #Check last event for error. Must throw an error if, for instance, namespace CPU quoata was exceeded
+            $LastEventForJob = &"kubectl" "--%" "get events -n $env:ENVIRONMENT --sort-by=.metadata.creationTimestamp --field-selector involvedObject.kind=Job,involvedObject.name=joinrpg-dal-migrate -o jsonpath='{.items[-1:].message}'"
+            if ($LastEventForJob -imatch "^'Error .*") { throw $LastEventForJob }
+        
+            $"kubectl" "--%" "logs -n $env:ENVIRONMENT --follow job/joinrpg-dal-migrate"
+            Start-Sleep 3
+          }
+        
+           #Fail octopus step if job is Failed
+           if ($Matches[0] -eq 'Failed') {
+           Write-Output "Migration has failed. Migration's job pod info:"
+           &"kubectl" "--%"  "get pods -n $env:ENVIRONMENT --selector=job-name=joinrpg-dal-migrate -o=yaml"
+           exit 1
+           }
+        shell: pwsh
 
       - name: Deploy to k8s
         run: |
-          kubectl replace --force -f ./kustomize_output/* --namespace ${ENVIRONMENT} --insecure-skip-tls-verify
-          kubectl rollout status deployment/${APP_NAME} --namespace ${ENVIRONMENT} --insecure-skip-tls-verify
+          #prune means - delete everything with this label which is not in the directory (e.g. old generated secrets)
+
+          kubectl apply -f ./kustomize_output --prune -l managed-by-kustomize --namespace ${ENVIRONMENT}
+          kubectl rollout status deployment/${APP_NAME} --namespace ${ENVIRONMENT}
